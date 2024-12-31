@@ -1,0 +1,479 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include<string.h>
+
+
+/*
+ *   ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ 
+ *  |   |   |   |   |                       |   |
+ *  | 0 | 1 | 2 | 3 |     .....             |127|
+ *  |___|___|___|___|_______________________|___|
+ *  |   \    <-----  data blocks ------>
+ *  |     \
+ *  |       \
+ *  |         \
+ *  |           \
+ *  |             \
+ *  |               \
+ *  |                 \
+ *  |                   \
+ *  |                     \
+ *  |                       \
+ *  |                         \
+ *  |                           \
+ *  |                             \
+ *  |                               \
+ *  |                                 \
+ *  |                                   \
+ *  |                                     \
+ *  |                                       \
+ *  |                                         \
+ *  |                                           \
+ *  |     <--- super block --->                   \
+ *  |______________________________________________|
+ *  |               |      |      |        |       |
+ *  |        free   |      |      |        |       |
+ *  |       block   |inode0|inode1|   .... |inode15|
+ *  |        list   |      |      |        |       |
+ *  |_______________|______|______|________|_______|
+ *
+ *
+ */
+
+
+#define FILENAME_MAXLEN 8  // including the NULL char
+
+/* 
+ * inode 
+ */
+
+typedef struct inode {
+  int  dir;  // boolean value. 1 if it's a directory.
+  char name[FILENAME_MAXLEN];
+  int  size;  // actual file/directory size in bytes.
+  int  blockptrs [8];  // direct pointers to blocks containing file's content.
+  int  used;  // boolean value. 1 if the entry is in use.
+  int  rsvd;  // reserved for future use
+} inode;
+
+/* 
+ * directory entry
+ */
+
+typedef struct dirent {
+  char name[FILENAME_MAXLEN];
+  int  namelen;  // length of entry name
+  int  inode;  // this entry inode index
+} dirent;
+
+// file entry
+typedef struct file{
+  char name[FILENAME_MAXLEN];
+  int namelen;
+  int inode;
+} file;
+// datablock structure
+typedef struct datablk{
+  dirent dir[5];
+  file file1[25];
+  char data[544];
+} datablk;
+// freeblock structure
+typedef struct freeblock {
+  char* value[1];
+  datablk *ptr;
+} freeblock;
+
+
+/*
+ * functions
+ */
+// create file
+void create_file(char* filename, int file_size){
+    printf("Name:  %s\n",filename);
+    printf("Size:  %d \n",file_size);
+}
+
+//delete file
+void delete_file(char* filename){
+    printf("Name:  %s\n",filename);
+}
+
+//copy file
+void copy_file(char* src, char* dest){
+    printf("Name:  %s\n",src);
+    printf("Size:  %s \n",dest);
+}
+
+//move file
+void move_file(char* src, char* dest){
+    printf("Name:  %s\n",src);
+    printf("Size:  %s \n",dest);
+}
+
+//create a directory
+void create_dir(char* name, void ** filesystem){
+    printf("Name:  %s\n",name);
+    char *token=strtok(name,"/");
+    char *args[100];
+    int count=0;
+    int arg=0;
+    while(token!=NULL)
+    {
+	args[count]=strdup(token);
+	count+=1;
+	token=strtok(NULL,"/");
+    }
+    printf("Count : %d \n",count);
+    for(int i=0; i<count; ++i)
+    {
+	printf("%s \n",args[i]);
+    }
+    void *superblock=filesystem;
+    datablk *datablock=(datablk*)((char*)filesystem+1024);
+    freeblock *freelist=(freeblock *)superblock;
+    inode *inode_table=(inode*)superblock+128;
+    int exit1=1;
+    while(arg != count)
+    {
+    	int in_no=0;
+    	for(int i=0; i<16; i++)
+    	{
+		if(strcmp(inode_table[i].name," ")==0)
+		{
+			in_no=i;
+			break;
+		}
+    	}
+	printf("Inode no: %d \n",in_no);
+        dirent newdir;
+    	strcpy(newdir.name,args[arg]);
+    	newdir.namelen=strlen(args[arg]);
+    	newdir.inode=in_no;
+    	inode_table[in_no].dir=1;
+    	strcpy(inode_table[in_no].name,newdir.name);
+    	inode_table[in_no].size=8192;
+        if (arg==0)
+	{
+    		int inode_root=0;
+    		if (count>1)
+    		{
+			inode_table[in_no].used=1;
+    		}
+    		int freeb=0;
+    		for(int i=0; i<128; i++)
+    		{
+			if(strcmp(freelist[i].value,"0")==0)
+			{
+				freeb=i;
+				break;
+			}
+     		}
+    		printf("Free block: %d \n",freeb);
+    		int con=freeb;
+    		for(int i=0 ; i<8 ; i++)
+    		{
+			inode_table[in_no].blockptrs[i]=con;
+			con+=1;
+    		}
+    		printf("Name of directory: %s \n",inode_table[1].name);
+    		for(int i= 0 ; i<8; i++)
+    		{
+			strcpy(freelist[freeb].value,"1");
+			freeb+=1;
+    		}
+		printf("Hello \n");
+    		int dirindex=-1;
+		int index=-1;
+		int whlcount=-1;
+    		for(int i=0; i<8; i++)
+    		{
+			index=inode_table[inode_root].blockptrs[i];
+			for(int j=0; j<5; j++)
+			{
+				if (strcmp(datablock[index].dir[j].name,newdir.name)==0)
+				{
+					printf("The directory already exists\n");
+					whlcount=0;
+					break;
+				}
+			}
+			if (whlcount==0)
+			{
+				exit1=0;
+				break;
+			}
+			for(int j=0; j<5; j++)
+			{
+				if(strcmp(datablock[index].dir[j].name," ")==0)
+				{
+					dirindex=j;
+					break;
+				}
+			}
+			if (dirindex>-1) //if the directory index is found break the loop
+			{
+				break;
+			}
+		}
+		if(exit1==0 && count==arg)//breaking the outer while loop if the directory already exists
+		{
+			break;
+		}
+		if (whlcount !=0)
+		{
+			printf("Index no: %d \n",index);
+			printf("Dir index no: %d \n",dirindex);
+			if(index>-1 && dirindex>-1)
+			{
+				strcpy(datablock[index].dir[dirindex].name,newdir.name);
+				datablock[index].dir[dirindex].namelen=newdir.namelen;
+				datablock[index].dir[dirindex].inode=newdir.inode;
+			}
+			else
+			{
+				printf("The directory doesn't have enough space \n");
+				break;
+			}
+			printf("Created: %s \n",datablock[0].dir[0].name);
+		}
+ 	}
+	else if(arg >0)
+	{
+		int inode_root=arg;
+		if(count>arg+1)
+		{
+			inode_table[in_no].used=1;
+		}
+		int freeb=0;
+		for(int i=0; i<128; i++)
+		{
+			if(strcmp(freelist[i].value,"0")==0)
+			{
+				freeb=i;
+				break;
+			}
+		}
+		
+		printf("Root dir: %s",inode_table[inode_root].name);
+		printf("Free block: %d \n",freeb);
+		int con=freeb;
+		for(int i=0; i<8; i++)
+		{
+			inode_table[in_no].blockptrs[i]=con;
+			con+=1;
+		}
+		printf("Name of directory2: %s \n",inode_table[2].name);
+		for(int i=0; i<8; i++)
+		{
+			strcpy(freelist[freeb].value,"1");
+			freeb+=1;
+		}
+		int index=-1;
+		int dirindex=-1;
+		int whlcount=-1;
+		for(int i=0; i<8; i++)
+		{
+			index=inode_table[inode_root].blockptrs[i];
+			for(int j=0; j<5;j++)
+			{
+				if(strcmp(datablock[index].dir[j].name,args[arg])==0)
+				{
+					printf("The directory already exists \n");
+					whlcount=0;
+					break;
+				}
+			}
+			if(whlcount==0)
+			{
+				exit1=0;
+				break;
+			}
+			for(int j=0; j<5; j++)
+			{
+				if(strcmp(datablock[index].dir[j].name," ")==0)
+				{
+					dirindex=j;
+					break;
+				}
+			}
+			if (dirindex>-1)
+			{
+				break;
+			}
+		}
+		if(exit1==0 && count==arg)
+		{
+			break;
+		}
+		if(whlcount!=0)
+		{
+			printf("Index no: %d \n",index);
+			printf("Dir index no: %d \n",dirindex);
+			if (index>-1 && dirindex>-1)
+			{
+				strcpy(datablock[index].dir[dirindex].name,newdir.name);
+				datablock[index].dir[dirindex].namelen=newdir.namelen;
+				datablock[index].dir[dirindex].inode=newdir.inode;
+			}
+			else
+			{
+				printf("The directory doesn't have enough space \n");
+				break;
+			}
+			printf("Name of 2nd dir: %s \n",datablock[8].dir[0].name);
+		}
+	}
+	arg+=1;
+    }
+
+}
+
+//delete a directory
+void delete_dir(char* name){
+    printf("Name:  %s\n",name);
+}
+
+//List all files
+void list(){
+    printf("inside");
+}
+
+
+
+/*
+ * main
+ */
+
+int main (int argc, char* argv[]){
+  //filesystem
+  size_t sz_file= 128 * 1024;
+  void *filesystem=malloc(sz_file);
+  //superblock
+  size_t superblock_size=1024;
+  void *superblock=filesystem;
+  //datablock
+  datablk *datablock=(datablk*)((char*)filesystem+1024);
+  // creating freeblock in superblock
+  freeblock *freelist=(freeblock *)(superblock);
+  for (int i=0; i<128 ; ++i){
+    strcpy(freelist[i].value,"0");
+    freelist[i].ptr=&datablock[i];
+  }
+  // creating datablocks
+  for(int i=0; i<127;i++)
+  {
+    strcpy(datablock[i].data," ");
+    for(int j=0; j<5; j++)
+    {
+	datablock[i].dir[j].namelen=0;
+	datablock[i].dir[j].inode=-1;
+        strcpy(datablock[i].dir[j].name," ");
+   }
+   for(int k=0; k<25; k++)
+   {
+	datablock[i].file1[k].namelen=0;
+	datablock[i].file1[k].inode=-1;
+	strcpy(datablock[i].file1[k].name," ");
+    }
+  }
+ // for (int i=0; i<128; i++)
+  //{
+//	printf("%s",freelist[i].ptr->data);
+  //}
+   datablk *adr=(datablk*)((char*)filesystem+1024);
+  // creating inode table in superblock
+  inode *inode_table=(inode*)superblock+128;
+  for(int i=0 ; i<16 ;++i)
+  {
+  	inode_table[i].dir=0;
+	strcpy(inode_table[i].name," ");
+	inode_table[i].size=0;
+	for(int j=0; j<8; ++j)
+	{
+		inode_table[i].blockptrs[j]=128; //I have stored 128 because there are only 127 datablocks in total
+	}
+
+	inode_table[i].used=0;
+	inode_table[i].rsvd=0;
+ }
+// creating root directory
+  int count1=0;
+  for(int i=0; i<16; i++)
+  {
+	if (strcmp(inode_table[i].name," ")==0)
+	{
+		count1=i;
+		break;
+	}
+  }
+  printf("Value of inode: %d\n",count1);
+  dirent root;
+  strcpy(root.name,"/");
+  root.namelen=2;
+  root.inode=count1;
+  inode_table[count1].dir=1;
+  strcpy(inode_table[count1].name,"/");
+  inode_table[count1].size=8192;
+  inode_table[count1].used=1;
+  for(int i=0; i<8; i++)
+  {
+	inode_table[count1].blockptrs[i]=i;
+  }
+  for (int i=0; i<8 ; i++)
+  {
+	strcpy(freelist[i].value,"1");
+  }
+  for(int i=0; i<8; i++)
+  {
+	printf("%s",freelist[i].value);
+	printf("\n");
+  }
+  printf("Name: %s\n",inode_table[0].name);
+  printf("Size: %d \n",inode_table[0].size);
+  printf("Directory 0 Name: %s \n",datablock[0].dir[0].name);
+  //for (int i=0; i<8; i++)
+  //{
+    // printf("%d",inode_table[0].blockptrs[i]);
+  //}
+  //for (int i=0; i<4; i++)
+  //{
+//	int val=inode_table[0].blockptrs[i];
+//	printf("%s \n",datablock[val].dir[0].name);
+	//strcpy(datablock[val].dir[0].name,"/");
+	//datablock[val].dir[0].namelen=2;
+	//datablock[val].dir[0].inode=count1;
+   //}
+   int exit1=1;
+   while(exit1)
+   {
+	char input[50];
+	printf("prompt->");
+	fgets(input,50,stdin);
+	input[strcspn(input,"\n")]='\0';
+	int i=0;
+	char *token=strtok(input," ");
+	char * args[100];
+	while(token!=NULL)
+	{
+		args[i]=strdup(token);
+		i+=1;
+		token=strtok(NULL," ");
+	}
+	if (strcmp(args[0],"exit")==0)
+	{
+		break;
+	}
+	else if(strcmp(args[0],"CD")==0)
+	{
+		char name[8];
+		strcpy(name,args[1]);
+		create_dir(name,filesystem);
+		printf("Name: %s \n",datablock[0].dir[0].name);
+		printf("Name of dir2 %s \n",datablock[8].dir[0].name);
+		printf("Name of dir3 %s \n",datablock[16].dir[0].name);
+		printf("Name of dir4: %s \n",datablock[0].dir[1].name);
+	}
+     }
+  return 0;
+}
